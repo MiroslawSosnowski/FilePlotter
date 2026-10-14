@@ -10,6 +10,21 @@ from numpy.typing import NDArray
 
 
 PROJECT_VERSION = 1
+DEFAULT_PLOT_CONFIG: dict[str, Any] = {
+    "title": "",
+    "x_label": "X",
+    "primary_y_label": "Primary Y",
+    "secondary_y_label": "Secondary Y",
+    "background": "#111827",
+    "grid": True,
+    "grid_alpha": 0.25,
+    "legend": True,
+    "line_width": 1.6,
+}
+
+
+def default_plot_config() -> dict[str, Any]:
+    return dict(DEFAULT_PLOT_CONFIG)
 
 
 @dataclass(frozen=True, slots=True)
@@ -147,9 +162,7 @@ class Curve:
 class Project:
     sources: dict[str, DataSource] = field(default_factory=dict)
     curves: dict[str, Curve] = field(default_factory=dict)
-    plot_config: dict[str, Any] = field(
-        default_factory=lambda: {"grid": True, "background": "#111827"}
-    )
+    plot_config: dict[str, Any] = field(default_factory=default_plot_config)
     version: int = PROJECT_VERSION
 
     def curve_arrays(

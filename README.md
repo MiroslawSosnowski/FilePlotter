@@ -24,7 +24,9 @@ You can also pass a saved project directly to `run.cmd`.
 3. Choose a source X column and check any Y signals in the source tree.
 4. Select one or more checked signals to edit X/Y shift and scale, color, line
    style, X override, or primary/secondary Y-axis assignment.
-5. Save a `.fplot.json` project or export a full-resolution transformed CSV,
+5. Use the **Plot** tab on the right to edit the title, axis labels, background,
+   grid, legend and global line width.
+6. Save a `.fplot.json` project or export a full-resolution transformed CSV,
    PNG, or SVG.
 
 Blank, non-numeric, NaN, and infinite samples are reported as gaps and excluded

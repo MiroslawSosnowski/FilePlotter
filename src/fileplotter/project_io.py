@@ -13,6 +13,7 @@ from fileplotter.models import (
     Curve,
     DataSource,
     Project,
+    default_plot_config,
 )
 
 
@@ -65,7 +66,9 @@ def load_project(
         raise ProjectFormatError("Project sources and curves must be lists.")
 
     active_loader = loader or DataSourceLoader()
-    project = Project(plot_config=dict(payload.get("plot_config") or {}))
+    plot_config = default_plot_config()
+    plot_config.update(dict(payload.get("plot_config") or {}))
+    project = Project(plot_config=plot_config)
     warnings: list[str] = []
     for descriptor in payload["sources"]:
         _validate_source_descriptor(descriptor)

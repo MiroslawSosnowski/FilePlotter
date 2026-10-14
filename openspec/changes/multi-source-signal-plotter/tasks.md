@@ -5,6 +5,7 @@
 - [x] Implement independent CSV and XLSX source import, worksheet/header selection, validation and loading progress.
 - [x] Implement stable source/curve models and independent X column mapping.
 - [x] Implement source tree, Y checkboxes and multi-curve overlay with legend, zoom/pan and auto-fit.
+- [x] Add a right-side plot customization tab with persistent title, axes, background, grid, legend and line-width settings.
 - [x] Add focused tests for import, duplicate column names and different-length X arrays.
 
 ## Phase 2 — Curve operations

@@ -11,6 +11,7 @@ from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import QAction, QColor, QCloseEvent
 from PyQt6.QtWidgets import (
     QApplication,
+    QCheckBox,
     QComboBox,
     QDoubleSpinBox,
     QFileDialog,
@@ -18,11 +19,13 @@ from PyQt6.QtWidgets import (
     QHBoxLayout,
     QInputDialog,
     QLabel,
+    QLineEdit,
     QMainWindow,
     QMessageBox,
     QProgressDialog,
     QPushButton,
     QSplitter,
+    QTabWidget,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -32,7 +35,14 @@ from pyqtgraph.exporters import ImageExporter, SVGExporter
 
 from fileplotter.exporters import export_curves_csv
 from fileplotter.importers import DataSourceLoader, ImportFailure
-from fileplotter.models import Curve, DataSource, Project, Transform, stable_curve_id
+from fileplotter.models import (
+    Curve,
+    DataSource,
+    Project,
+    Transform,
+    default_plot_config,
+    stable_curve_id,
+)
 from fileplotter.project_io import ProjectFormatError, load_project, save_project
 
 
@@ -105,6 +115,7 @@ class PlotCanvas(pg.PlotWidget):
         self._items: list[tuple[pg.PlotDataItem, str]] = []
         self.plot_item.vb.sigResized.connect(self._sync_secondary)
         self.scene().sigMouseMoved.connect(self._mouse_moved)
+        self.apply_config(default_plot_config())
         self._sync_secondary()
 
     def _sync_secondary(self) -> None:
@@ -119,6 +130,7 @@ class PlotCanvas(pg.PlotWidget):
             self.cursor_text.emit(f"Cursor  X {point.x():.7g}   Y {point.y():.7g}")
 
     def render_project(self, project: Project) -> None:
+        self.apply_config(project.plot_config)
         for item, axis in self._items:
             (self.secondary if axis == "secondary" else self.plot_item).removeItem(item)
         self._items.clear()
@@ -131,8 +143,11 @@ class PlotCanvas(pg.PlotWidget):
                 x, y = project.curve_arrays(curve)
             except KeyError:
                 continue
+            line_width = max(0.1, float(project.plot_config.get("line_width", 1.6)))
             pen = pg.mkPen(
-                QColor(curve.color), width=1.6, style=PEN_STYLES[curve.line_style]
+                QColor(curve.color),
+                width=line_width,
+                style=PEN_STYLES[curve.line_style],
             )
             item = pg.PlotDataItem(x, y, pen=pen, connect="finite")
             if curve.axis == "secondary":
@@ -145,6 +160,24 @@ class PlotCanvas(pg.PlotWidget):
             item.setClipToView(True)
             self.legend.addItem(item, curve.display_label)
             self._items.append((item, curve.axis))
+
+    def apply_config(self, raw_config: dict[str, Any]) -> None:
+        config = default_plot_config()
+        config.update(raw_config)
+        background = QColor(str(config["background"]))
+        if not background.isValid():
+            background = QColor(default_plot_config()["background"])
+        self.setBackground(background)
+        alpha = min(1.0, max(0.0, float(config["grid_alpha"])))
+        show_grid = bool(config["grid"])
+        self.plot_item.showGrid(x=show_grid, y=show_grid, alpha=alpha)
+        self.plot_item.setTitle(str(config["title"]))
+        self.plot_item.setLabel("bottom", str(config["x_label"]))
+        self.plot_item.setLabel("left", str(config["primary_y_label"]))
+        self.plot_item.getAxis("right").setLabel(
+            str(config["secondary_y_label"])
+        )
+        self.legend.setVisible(bool(config["legend"]))
 
     def auto_fit(self) -> None:
         self.plot_item.enableAutoRange()
@@ -187,8 +220,11 @@ class MainWindow(QMainWindow):
         self.plot = PlotCanvas()
         self.plot.cursor_text.connect(self.statusBar().showMessage)
 
-        right = QWidget()
-        right_layout = QVBoxLayout(right)
+        self.properties_tabs = QTabWidget()
+        right = self.properties_tabs
+        curve_tab = QWidget()
+        right.addTab(curve_tab, "Curve")
+        right_layout = QVBoxLayout(curve_tab)
         right_layout.setContentsMargins(10, 10, 10, 10)
         right_layout.addWidget(QLabel("Selected curve properties"))
         form = QFormLayout()
@@ -236,9 +272,50 @@ class MainWindow(QMainWindow):
         right_layout.addWidget(self.selection_summary)
         right_layout.addStretch(1)
 
+        plot_tab = QWidget()
+        right.addTab(plot_tab, "Plot")
+        plot_layout = QVBoxLayout(plot_tab)
+        plot_layout.setContentsMargins(10, 10, 10, 10)
+        plot_layout.addWidget(QLabel("Plot appearance"))
+        plot_form = QFormLayout()
+        self.plot_title = QLineEdit()
+        self.plot_x_label = QLineEdit()
+        self.plot_primary_y_label = QLineEdit()
+        self.plot_secondary_y_label = QLineEdit()
+        self.plot_background_button = QPushButton("Choose…")
+        self.plot_background_button.clicked.connect(self._choose_plot_background)
+        self.plot_grid = QCheckBox("Show grid")
+        self.plot_legend = QCheckBox("Show legend")
+        self.plot_grid_alpha = QDoubleSpinBox()
+        self.plot_grid_alpha.setRange(0.0, 1.0)
+        self.plot_grid_alpha.setSingleStep(0.05)
+        self.plot_grid_alpha.setDecimals(2)
+        self.plot_line_width = QDoubleSpinBox()
+        self.plot_line_width.setRange(0.5, 8.0)
+        self.plot_line_width.setSingleStep(0.1)
+        self.plot_line_width.setDecimals(1)
+        plot_form.addRow("Title", self.plot_title)
+        plot_form.addRow("X axis label", self.plot_x_label)
+        plot_form.addRow("Primary Y label", self.plot_primary_y_label)
+        plot_form.addRow("Secondary Y label", self.plot_secondary_y_label)
+        plot_form.addRow("Background", self.plot_background_button)
+        plot_form.addRow("Grid opacity", self.plot_grid_alpha)
+        plot_form.addRow("Line width", self.plot_line_width)
+        plot_layout.addLayout(plot_form)
+        plot_layout.addWidget(self.plot_grid)
+        plot_layout.addWidget(self.plot_legend)
+        apply_plot = QPushButton("Apply plot settings")
+        apply_plot.clicked.connect(self._apply_plot_settings)
+        reset_plot = QPushButton("Reset plot settings")
+        reset_plot.clicked.connect(self._reset_plot_settings)
+        plot_layout.addWidget(apply_plot)
+        plot_layout.addWidget(reset_plot)
+        plot_layout.addStretch(1)
+
         self.x_column.currentIndexChanged.connect(self._apply_x_column)
         self.axis.currentTextChanged.connect(self._apply_axis)
         self.line_style.currentTextChanged.connect(self._apply_line_style)
+        self._load_plot_controls()
 
         splitter.addWidget(left)
         splitter.addWidget(self.plot)
@@ -535,6 +612,58 @@ class MainWindow(QMainWindow):
         self.color_button.setStyleSheet(f"background: {color.name()};")
         self.plot.render_project(self.project)
 
+    def _load_plot_controls(self) -> None:
+        config = default_plot_config()
+        config.update(self.project.plot_config)
+        self.plot_title.setText(str(config["title"]))
+        self.plot_x_label.setText(str(config["x_label"]))
+        self.plot_primary_y_label.setText(str(config["primary_y_label"]))
+        self.plot_secondary_y_label.setText(str(config["secondary_y_label"]))
+        self.plot_grid.setChecked(bool(config["grid"]))
+        self.plot_legend.setChecked(bool(config["legend"]))
+        self.plot_grid_alpha.setValue(float(config["grid_alpha"]))
+        self.plot_line_width.setValue(float(config["line_width"]))
+        self._pending_plot_background = str(config["background"])
+        self.plot_background_button.setStyleSheet(
+            f"background: {self._pending_plot_background};"
+        )
+
+    def _choose_plot_background(self) -> None:
+        from PyQt6.QtWidgets import QColorDialog
+
+        color = QColorDialog.getColor(
+            QColor(self._pending_plot_background), self, "Plot background"
+        )
+        if not color.isValid():
+            return
+        self._pending_plot_background = color.name()
+        self.plot_background_button.setStyleSheet(
+            f"background: {self._pending_plot_background};"
+        )
+
+    def _apply_plot_settings(self) -> None:
+        self.project.plot_config.update(
+            {
+                "title": self.plot_title.text().strip(),
+                "x_label": self.plot_x_label.text().strip(),
+                "primary_y_label": self.plot_primary_y_label.text().strip(),
+                "secondary_y_label": self.plot_secondary_y_label.text().strip(),
+                "background": self._pending_plot_background,
+                "grid": self.plot_grid.isChecked(),
+                "grid_alpha": self.plot_grid_alpha.value(),
+                "legend": self.plot_legend.isChecked(),
+                "line_width": self.plot_line_width.value(),
+            }
+        )
+        self.plot.render_project(self.project)
+        self.statusBar().showMessage("Plot settings applied", 3000)
+
+    def _reset_plot_settings(self) -> None:
+        self.project.plot_config = default_plot_config()
+        self._load_plot_controls()
+        self.plot.render_project(self.project)
+        self.statusBar().showMessage("Plot settings reset", 3000)
+
     def _save_project(self) -> None:
         if self.project_path is None:
             self._save_project_as()
@@ -582,6 +711,7 @@ class MainWindow(QMainWindow):
         self.project = project
         self.project_path = Path(path)
         self._rebuild_tree()
+        self._load_plot_controls()
         self.plot.render_project(project)
         if warnings:
             QMessageBox.warning(self, "Project warnings", "\n".join(warnings))
@@ -655,6 +785,7 @@ def main(argv: list[str] | None = None) -> int:
             window.project = project
             window.project_path = Path(arguments.project)
             window._rebuild_tree()
+            window._load_plot_controls()
             window.plot.render_project(project)
             if warnings:
                 window.statusBar().showMessage("; ".join(warnings), 15_000)

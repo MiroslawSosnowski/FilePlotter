@@ -26,6 +26,15 @@ def test_project_round_trip_and_moved_source_relink(tmp_path: Path) -> None:
     source_path = tmp_path / "source.csv"
     source_path.write_text("t,f\n0,1\n1,2\n", encoding="utf-8")
     project = _project_from_csv(source_path)
+    project.plot_config.update(
+        {
+            "title": "Load comparison",
+            "background": "#20242b",
+            "grid": False,
+            "legend": False,
+            "line_width": 2.4,
+        }
+    )
     project_path = tmp_path / "session.fplot.json"
     save_project(project, project_path)
     payload = json.loads(project_path.read_text(encoding="utf-8"))
@@ -41,6 +50,7 @@ def test_project_round_trip_and_moved_source_relink(tmp_path: Path) -> None:
     restored_curve = next(iter(restored.curves.values()))
     assert restored_curve.transform == next(iter(project.curves.values())).transform
     assert restored.sources[restored_curve.source_id].path == moved.resolve()
+    assert restored.plot_config == project.plot_config
 
 
 def test_missing_source_is_recoverable(tmp_path: Path) -> None:

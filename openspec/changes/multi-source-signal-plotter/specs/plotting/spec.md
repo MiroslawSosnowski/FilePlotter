@@ -24,3 +24,9 @@ The system SHALL keep UI interaction responsive for large datasets through async
 #### Scenario: Large source
 - **WHEN** a large source is loaded
 - **THEN** loading progress and errors are visible and the main UI is not blocked by file parsing.
+
+### Requirement: Plot appearance customization
+The system SHALL provide a dedicated right-side tab for editing the plot title, axis labels, background, grid, legend and global line width, and SHALL persist those settings in the project.
+#### Scenario: Customize and reopen a plot
+- **WHEN** the user applies custom plot appearance settings and saves the project
+- **THEN** the plot updates immediately and the same appearance is restored when the project is reopened.
