@@ -12,6 +12,12 @@ SETTINGS_FILENAME = "plot_settings.json"
 
 
 def application_root() -> Path:
+    """Return the directory that owns application-level settings.
+
+    A PyInstaller one-file app is unpacked into a temporary directory, so
+    ``__file__`` must not be used in frozen mode. ``sys.executable`` continues
+    to point at the launched FilePlotter executable.
+    """
     if getattr(sys, "frozen", False):
         return Path(sys.executable).resolve().parent
     entry_point = Path(sys.argv[0]).resolve()

@@ -45,8 +45,10 @@ application.
 5. Use the scrollable **Plot** tab to edit titles, colors, grid, legend, line
    width, major/minor tick counts, tick length, font sizes, secondary-axis
    visibility, and automatic or manual X/Y ranges.
-6. **Apply plot settings** also saves defaults to `plot_settings.json` beside
-   the application. A project keeps its own plot settings when saved.
+6. **Apply plot settings** also saves defaults to `plot_settings.json`. In the
+   compiled app, this file is read from and written beside `FilePlotter.exe`;
+   if it does not exist or cannot be read, FilePlotter starts with its initial
+   defaults. A project keeps its own plot settings when saved.
 7. Use **Copy plot to clipboard** or `Ctrl+Shift+C` to paste the rendered plot
    into another application.
 8. Save a `.fplot.json` project or export a full-resolution transformed CSV,

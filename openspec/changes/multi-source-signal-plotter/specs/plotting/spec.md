@@ -42,6 +42,8 @@ The system SHALL provide a dedicated right-side tab for editing the plot title, 
 #### Scenario: Reuse application defaults
 - **WHEN** the user applies appearance settings without opening a saved project
 - **THEN** the settings are written to `plot_settings.json` beside the application and loaded on the next launch.
+- **AND** a compiled application resolves "beside the application" as the directory containing `FilePlotter.exe`, not PyInstaller's temporary extraction directory.
+- **AND** when that file is absent or unreadable, the application uses its initial plot defaults.
 
 #### Scenario: Manual axis ranges
 - **WHEN** automatic range is disabled for X, primary Y, or secondary Y and valid minimum and maximum values are applied

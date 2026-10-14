@@ -362,8 +362,6 @@ class MainWindow(QMainWindow):
         self.resize(1440, 860)
         self.loader = DataSourceLoader()
         app_plot_config = load_plot_settings()
-        # A title belongs to the loaded data/project, not to global style defaults.
-        app_plot_config["title"] = ""
         self.project = Project(plot_config=app_plot_config)
         self.project_path: Path | None = None
         self._jobs: list[tuple[QThread, ImportWorker, QProgressDialog]] = []

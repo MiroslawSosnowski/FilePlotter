@@ -244,6 +244,20 @@ def test_plot_customization_tab_applies_and_resets_settings(
     assert window.project.plot_config == default_plot_config()
 
 
+def test_main_window_keeps_loaded_plot_settings(qtbot, monkeypatch) -> None:
+    saved = default_plot_config()
+    saved.update({"title": "Saved title", "grid": False, "x_tick_count": 9})
+    monkeypatch.setattr(app_module, "load_plot_settings", lambda: saved)
+
+    window = MainWindow()
+    qtbot.addWidget(window)
+
+    assert window.project.plot_config["title"] == "Saved title"
+    assert window.plot_title.text() == "Saved title"
+    assert window.plot_grid.isChecked() is False
+    assert window.plot_x_tick_count.value() == 9
+
+
 def test_manual_plot_range_rejects_reversed_limits(qtbot, monkeypatch) -> None:
     window = MainWindow()
     qtbot.addWidget(window)
