@@ -31,6 +31,10 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
     assert window.project.plot_config["title"] == "signals.csv"
     assert len(window.project.curves) == 2
     assert len(window.plot._items) == 2
+    assert [label.text for _sample, label in window.plot.legend.items] == [
+        "signal",
+        "x2",
+    ]
     x_selector = window._source_x_selectors[source.source_id]
     x_selector.setCurrentIndex(x_selector.findData("col_0002"))
     assert window.project.source_x_columns[source.source_id] == "col_0002"

@@ -208,7 +208,15 @@ class PlotCanvas(pg.PlotWidget):
             # it only after the item has been attached to its final view.
             item.setDownsampling(auto=True, method="peak")
             item.setClipToView(True)
-            self.legend.addItem(item, curve.display_label)
+            y_name = next(
+                (
+                    column.name
+                    for column in source.columns
+                    if column.column_id == curve.y_column_id
+                ),
+                curve.y_column_id,
+            )
+            self.legend.addItem(item, y_name)
             self._items.append((item, curve.axis))
         self._apply_ranges(project.plot_config)
         self._update_tick_spacing()

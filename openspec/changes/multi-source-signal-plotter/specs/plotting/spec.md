@@ -5,7 +5,11 @@
 The system SHALL render multiple selected signals with legends, configurable styles, zoom, pan, grid and auto-fit.
 #### Scenario: Overlay datasets
 - **WHEN** signals from CSV and XLSX are enabled
-- **THEN** both appear on the same plot with distinguishable source labels.
+- **THEN** both appear on the same plot with distinguishable curve styles and colors.
+
+#### Scenario: Legend labels use Y variables
+- **WHEN** a curve is rendered for a selected Y column
+- **THEN** its legend entry displays the Y-column name rather than the source file name.
 
 ### Requirement: Separate Y axes
 The system SHALL support assigning a curve to either a primary or secondary Y axis.
