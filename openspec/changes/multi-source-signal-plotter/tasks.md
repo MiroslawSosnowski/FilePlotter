@@ -6,9 +6,11 @@
 - [x] Implement stable source/curve models and independent X column mapping.
 - [x] Implement source tree, multi-select Y control and multi-curve overlay with legend, zoom/pan and auto-fit.
 - [x] Add a right-side plot customization tab with persistent title, axes, background, grid, legend and line-width settings.
-- [x] Replace per-row Y checkboxes with source-level X and multi-select Y controls.
+- [x] Replace per-row Y checkboxes with source-level X mapping and multi-select Y behavior.
 - [x] Add advanced tick/font/color settings, application-folder defaults and clipboard plot copy.
 - [x] Separate axis mapping from available signals and add secondary-axis, minor-tick and manual-range controls.
+- [x] Replace the redundant Y dropdown with double-click plotting and color plotted signal rows by curve color.
+- [x] Replace the X dropdown with a signal-row context action and add a compact CSV/XLSX drop target.
 - [x] Add focused tests for import, duplicate column names and different-length X arrays.
 
 ## Phase 2 — Curve operations

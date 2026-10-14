@@ -3,6 +3,7 @@
 ## ADDED Requirements
 ### Requirement: Affine X and Y transforms
 The system SHALL apply `x_display = x_raw*x_scale + x_shift` and `y_display = y_raw*y_scale + y_shift` independently per curve, with identity defaults.
+The curve editor SHALL expose `x_shift` and `y_shift` as X and Y offset controls.
 #### Scenario: Shift and scale
 - **WHEN** the user sets x_scale=0.001, x_shift=2, y_scale=1000, y_shift=-50
 - **THEN** displayed points reflect exactly those equations.

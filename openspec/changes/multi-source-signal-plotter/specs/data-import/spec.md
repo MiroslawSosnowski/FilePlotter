@@ -7,6 +7,10 @@ The system SHALL load multiple comma-delimited CSV files into independent data s
 - **WHEN** the user imports a second CSV
 - **THEN** the first source remains available and columns from both sources can be plotted.
 
+#### Scenario: Drop data files
+- **WHEN** the user drops one or more CSV or XLSX files onto the compact source drop area
+- **THEN** each supported file enters the same worksheet and header-row import flow as files selected through the file dialog.
+
 ### Requirement: Excel worksheets
 The system SHALL support XLSX imports with worksheet selection and configurable header row.
 #### Scenario: Select worksheet

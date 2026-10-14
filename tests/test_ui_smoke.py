@@ -2,7 +2,8 @@ from pathlib import Path
 from dataclasses import replace
 
 import pytest
-from PyQt6.QtWidgets import QApplication
+from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication, QInputDialog
 
 from fileplotter.app import MainWindow
 from fileplotter.importers import DataSourceLoader
@@ -10,8 +11,40 @@ from fileplotter.models import default_plot_config
 
 
 def _select_all_y(window: MainWindow, source_id: str) -> None:
-    for action in window._source_y_selectors[source_id].menu().actions():
-        action.setChecked(True)
+    source_root = next(
+        window.source_tree.topLevelItem(index)
+        for index in range(window.source_tree.topLevelItemCount())
+        if window.source_tree.topLevelItem(index).data(0, Qt.ItemDataRole.UserRole)
+        == ("source", source_id)
+    )
+    signals_group = source_root.child(0)
+    x_column_id = window.project.source_x_columns[source_id]
+    for index in range(signals_group.childCount()):
+        item = signals_group.child(index)
+        _kind, _source_id, column_id = item.data(0, Qt.ItemDataRole.UserRole)
+        if column_id != x_column_id:
+            window.source_tree.itemDoubleClicked.emit(item, 0)
+
+
+def test_drop_zone_uses_the_standard_import_flow(qtbot, tmp_path: Path, monkeypatch) -> None:
+    path = tmp_path / "dropped.csv"
+    path.write_text("t,y\n0,1\n", encoding="utf-8")
+    window = MainWindow()
+    qtbot.addWidget(window)
+    imports: list[tuple[str, str | None, int]] = []
+    monkeypatch.setattr(QInputDialog, "getInt", lambda *_args: (1, True))
+    monkeypatch.setattr(
+        window,
+        "_start_import",
+        lambda source_path, sheet, header: imports.append(
+            (source_path, sheet, header)
+        ),
+    )
+
+    window.drop_zone.files_dropped.emit([str(path)])
+
+    assert window.drop_zone.acceptDrops()
+    assert imports == [(str(path), None, 0)]
 
 
 def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> None:
@@ -25,8 +58,7 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
     _select_all_y(window, source.source_id)
 
     root = window.source_tree.topLevelItem(0)
-    assert root.child(0).text(0) == "Axis mapping"
-    assert root.child(1).text(0) == "Available signals"
+    assert root.child(0).text(0) == "Available signals"
     assert window.plot_title.text() == "signals.csv"
     assert window.project.plot_config["title"] == "signals.csv"
     assert len(window.project.curves) == 2
@@ -35,8 +67,30 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
         "signal",
         "x2",
     ]
-    x_selector = window._source_x_selectors[source.source_id]
-    x_selector.setCurrentIndex(x_selector.findData("col_0002"))
+    signals_group = root.child(0)
+    for index in (1, 2):
+        item = signals_group.child(index)
+        _kind, source_id, column_id = item.data(0, Qt.ItemDataRole.UserRole)
+        curve = window.project.curves[
+            next(
+                curve_id
+                for curve_id, candidate in window.project.curves.items()
+                if candidate.source_id == source_id
+                and candidate.y_column_id == column_id
+            )
+        ]
+        assert item.foreground(0).color().name() == curve.color
+        assert item.text(1).startswith("plotted")
+
+    window.source_tree.itemDoubleClicked.emit(signals_group.child(1), 0)
+    assert not next(
+        curve
+        for curve in window.project.curves.values()
+        if curve.y_column_id == "col_0001"
+    ).visible
+    assert signals_group.child(1).text(1).startswith("available")
+    window.source_tree.itemDoubleClicked.emit(signals_group.child(1), 0)
+    window._set_source_x(source.source_id, "col_0002")
     assert window.project.source_x_columns[source.source_id] == "col_0002"
     assert all(
         curve.x_column_id == "col_0002"
@@ -49,6 +103,8 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
             if curve.y_column_id == "col_0002"
         )
     ].visible
+    assert signals_group.child(2).text(1).startswith("X axis")
+    assert signals_group.child(2).font(0).bold()
 
 
 def test_batch_transform_preserves_unedited_values_and_reset(qtbot, tmp_path: Path) -> None:
@@ -60,7 +116,7 @@ def test_batch_transform_preserves_unedited_values_and_reset(qtbot, tmp_path: Pa
     window._source_loaded(source)
     root = window.source_tree.topLevelItem(0)
     _select_all_y(window, source.source_id)
-    signals_group = root.child(1)
+    signals_group = root.child(0)
     first_item, second_item = signals_group.child(1), signals_group.child(2)
     curves = list(window.project.curves.values())
     curves[0].transform = replace(curves[0].transform, x_shift=1)

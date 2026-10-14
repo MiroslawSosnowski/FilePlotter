@@ -4,8 +4,8 @@
 Engineers need a responsive desktop tool to overlay and compare signals from multiple CSV and Excel files without modifying raw data or forcing identical sampling grids.
 
 ## Scope
-- Load multiple comma-delimited CSV and XLSX workbooks, select Excel sheets and header rows.
-- Select an independent X column per source and any number of Y signals via checkboxes.
+- Load or drag-and-drop multiple comma-delimited CSV and XLSX workbooks, then select Excel sheets and header rows.
+- Select an independent X column per source from a signal-row context menu and toggle any number of Y signals by double-clicking the signal inventory.
 - Overlay signals and control visibility, appearance, legends, zoom/pan and auto-fit.
 - Apply per-curve affine transformations to X and Y; support multi-selection and numeric editing.
 - Export plots and transformed data; save/reopen projects.

@@ -9,7 +9,15 @@ from typing import Any
 
 import pyqtgraph as pg
 from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
-from PyQt6.QtGui import QAction, QColor, QCloseEvent, QFont
+from PyQt6.QtGui import (
+    QAction,
+    QBrush,
+    QColor,
+    QCloseEvent,
+    QDragEnterEvent,
+    QDropEvent,
+    QFont,
+)
 from PyQt6.QtWidgets import (
     QApplication,
     QCheckBox,
@@ -30,7 +38,6 @@ from PyQt6.QtWidgets import (
     QSplitter,
     QSpinBox,
     QTabWidget,
-    QToolButton,
     QTreeWidget,
     QTreeWidgetItem,
     QVBoxLayout,
@@ -101,44 +108,41 @@ class ImportWorker(QObject):
             self.finished.emit()
 
 
-class YSignalSelector(QToolButton):
+class FileDropZone(QLabel):
+    files_dropped = pyqtSignal(list)
+
     def __init__(self, parent: QWidget | None = None) -> None:
-        super().__init__(parent)
-        self.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
-        self._menu = QMenu(self)
-        self.setMenu(self._menu)
-        self._update_text()
+        super().__init__("Drop CSV / XLSX here", parent)
+        self.setAcceptDrops(True)
+        self.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.setFixedHeight(42)
+        self.setStyleSheet(
+            "QLabel { border: 1px dashed #64748b; border-radius: 5px; "
+            "color: #94a3b8; background: #172033; }"
+        )
 
-    def configure(
-        self,
-        options: list[tuple[str, str]],
-        selected: set[str],
-        on_toggle: Any,
-    ) -> None:
-        self._menu.clear()
-        for label, column_id in options:
-            action = self._menu.addAction(label)
-            action.setCheckable(True)
-            action.setChecked(column_id in selected)
-            action.toggled.connect(
-                lambda checked, cid=column_id: self._toggle(
-                    cid, checked, on_toggle
-                )
-            )
-        self._update_text()
+    @staticmethod
+    def _paths(event: QDragEnterEvent | QDropEvent) -> list[str]:
+        return [
+            url.toLocalFile()
+            for url in event.mimeData().urls()
+            if url.isLocalFile()
+            and Path(url.toLocalFile()).suffix.lower() in {".csv", ".xlsx"}
+        ]
 
-    def _toggle(self, column_id: str, checked: bool, callback: Any) -> None:
-        callback(column_id, checked)
-        self._update_text()
-
-    def _update_text(self) -> None:
-        selected = [action.text() for action in self._menu.actions() if action.isChecked()]
-        if not selected:
-            self.setText("Choose Y signals…")
-        elif len(selected) == 1:
-            self.setText(selected[0])
+    def dragEnterEvent(self, event: QDragEnterEvent) -> None:
+        if self._paths(event):
+            event.acceptProposedAction()
         else:
-            self.setText(f"{len(selected)} Y signals selected")
+            event.ignore()
+
+    def dropEvent(self, event: QDropEvent) -> None:
+        paths = self._paths(event)
+        if not paths:
+            event.ignore()
+            return
+        event.acceptProposedAction()
+        self.files_dropped.emit(paths)
 
 
 class PlotCanvas(pg.PlotWidget):
@@ -336,8 +340,6 @@ class MainWindow(QMainWindow):
         self._jobs: list[tuple[QThread, ImportWorker, QProgressDialog]] = []
         self._dirty_transform_fields: set[str] = set()
         self._updating_controls = False
-        self._source_x_selectors: dict[str, QComboBox] = {}
-        self._source_y_selectors: dict[str, YSignalSelector] = {}
         self._curve_items: dict[tuple[str, str], QTreeWidgetItem] = {}
         self._build_ui()
         self._build_actions()
@@ -346,11 +348,18 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.source_tree = QTreeWidget()
-        self.source_tree.setHeaderLabels(["Sources and Y signals", "Selection / status"])
+        self.source_tree.setHeaderLabels(["Sources and signals", "Plot status"])
         self.source_tree.setSelectionMode(
             QTreeWidget.SelectionMode.ExtendedSelection
         )
+        self.source_tree.setContextMenuPolicy(
+            Qt.ContextMenuPolicy.CustomContextMenu
+        )
         self.source_tree.itemSelectionChanged.connect(self._selection_changed)
+        self.source_tree.itemDoubleClicked.connect(self._toggle_source_y_item)
+        self.source_tree.customContextMenuRequested.connect(
+            self._show_source_tree_menu
+        )
 
         left = QWidget()
         left_layout = QVBoxLayout(left)
@@ -358,6 +367,9 @@ class MainWindow(QMainWindow):
         add_source = QPushButton("Add CSV / XLSX")
         add_source.clicked.connect(self._choose_sources)
         left_layout.addWidget(add_source)
+        self.drop_zone = FileDropZone()
+        self.drop_zone.files_dropped.connect(self._add_source_paths)
+        left_layout.addWidget(self.drop_zone)
         left_layout.addWidget(self.source_tree)
 
         self.plot = PlotCanvas()
@@ -383,15 +395,17 @@ class MainWindow(QMainWindow):
         self.transform_inputs: dict[str, QDoubleSpinBox] = {}
         for key, label, default in (
             ("x_scale", "X scale", 1.0),
-            ("x_shift", "X shift", 0.0),
+            ("x_shift", "X offset", 0.0),
             ("y_scale", "Y scale", 1.0),
-            ("y_shift", "Y shift", 0.0),
+            ("y_shift", "Y offset", 0.0),
         ):
             spin = QDoubleSpinBox()
             spin.setRange(-1e100, 1e100)
             spin.setDecimals(10)
             spin.setValue(default)
             spin.setKeyboardTracking(False)
+            if key.endswith("shift"):
+                spin.setToolTip("Constant offset added after scaling.")
             spin.valueChanged.connect(
                 lambda _value, name=key: self._mark_transform_dirty(name)
             )
@@ -597,6 +611,9 @@ class MainWindow(QMainWindow):
             "",
             "Data files (*.csv *.xlsx);;CSV (*.csv);;Excel (*.xlsx)",
         )
+        self._add_source_paths(paths)
+
+    def _add_source_paths(self, paths: list[str]) -> None:
         for path in paths:
             sheet: str | None = None
             if Path(path).suffix.lower() == ".xlsx":
@@ -669,8 +686,6 @@ class MainWindow(QMainWindow):
     def _rebuild_tree(self) -> None:
         self.source_tree.blockSignals(True)
         self.source_tree.clear()
-        self._source_x_selectors.clear()
-        self._source_y_selectors.clear()
         self._curve_items.clear()
         for source in self.project.sources.values():
             root = QTreeWidgetItem([source.display_name, "ready" if source.available else "missing"])
@@ -679,13 +694,6 @@ class MainWindow(QMainWindow):
             numeric = source.numeric_columns
             if not numeric:
                 continue
-            mapping_group = QTreeWidgetItem(["Axis mapping", ""])
-            root.addChild(mapping_group)
-            x_row = QTreeWidgetItem(["X axis", ""])
-            mapping_group.addChild(x_row)
-            x_combo = QComboBox()
-            for column in numeric:
-                x_combo.addItem(self._column_label(source, column.column_id), column.column_id)
             existing = next(
                 (curve for curve in self.project.curves.values() if curve.source_id == source.source_id),
                 None,
@@ -693,43 +701,15 @@ class MainWindow(QMainWindow):
             selected_x = self.project.source_x_columns.get(source.source_id)
             if not selected_x and existing:
                 selected_x = existing.x_column_id
-            if selected_x:
-                x_combo.setCurrentIndex(max(0, x_combo.findData(selected_x)))
-            self.project.source_x_columns[source.source_id] = str(x_combo.currentData())
+            numeric_ids = {column.column_id for column in numeric}
+            if selected_x not in numeric_ids:
+                selected_x = numeric[0].column_id
+            self.project.source_x_columns[source.source_id] = selected_x
             for curve in self.project.curves.values():
                 if curve.source_id == source.source_id:
-                    curve.x_column_id = str(x_combo.currentData())
-                    if curve.y_column_id == x_combo.currentData():
+                    curve.x_column_id = selected_x
+                    if curve.y_column_id == selected_x:
                         curve.visible = False
-            x_combo.currentIndexChanged.connect(
-                lambda _index, sid=source.source_id, combo=x_combo: self._set_source_x(
-                    sid, combo.currentData()
-                )
-            )
-            self.source_tree.setItemWidget(x_row, 1, x_combo)
-            self._source_x_selectors[source.source_id] = x_combo
-
-            y_row = QTreeWidgetItem(["Y signals", ""])
-            mapping_group.addChild(y_row)
-            y_selector = YSignalSelector()
-            selected_y = {
-                curve.y_column_id
-                for curve in self.project.curves.values()
-                if curve.source_id == source.source_id and curve.visible
-            }
-            y_selector.configure(
-                [
-                    (self._column_label(source, column.column_id), column.column_id)
-                    for column in numeric
-                    if column.column_id != x_combo.currentData()
-                ],
-                selected_y,
-                lambda column_id, checked, sid=source.source_id: self._set_source_y(
-                    sid, column_id, checked
-                ),
-            )
-            self.source_tree.setItemWidget(y_row, 1, y_selector)
-            self._source_y_selectors[source.source_id] = y_selector
 
             signals_group = QTreeWidgetItem(["Available signals", ""])
             root.addChild(signals_group)
@@ -739,7 +719,7 @@ class MainWindow(QMainWindow):
                 item = QTreeWidgetItem(
                     [
                         self._column_label(source, column.column_id),
-                        self._curve_status(column, curve),
+                        self._curve_status(source, column, curve),
                     ]
                 )
                 item.setData(
@@ -749,8 +729,8 @@ class MainWindow(QMainWindow):
                 )
                 signals_group.addChild(item)
                 self._curve_items[(source.source_id, column.column_id)] = item
+                self._update_curve_item(source, column, curve)
             root.setExpanded(True)
-            mapping_group.setExpanded(True)
             signals_group.setExpanded(True)
         self.source_tree.blockSignals(False)
 
@@ -768,14 +748,65 @@ class MainWindow(QMainWindow):
         count = column.missing_count + column.invalid_count
         return f"{count:,} gaps" if count else "numeric"
 
-    def _curve_status(self, column: Any, curve: Curve | None) -> str:
+    def _curve_status(
+        self, source: DataSource, column: Any, curve: Curve | None
+    ) -> str:
+        if self.project.source_x_columns.get(source.source_id) == column.column_id:
+            return f"X axis · {self._quality_text(column)}"
         prefix = "plotted" if curve and curve.visible else "available"
         quality = self._quality_text(column)
         return f"{prefix} · {quality}"
 
+    def _update_curve_item(
+        self, source: DataSource, column: Any, curve: Curve | None
+    ) -> None:
+        item = self._curve_items.get((source.source_id, column.column_id))
+        if item is None:
+            return
+        is_x = self.project.source_x_columns.get(source.source_id) == column.column_id
+        item.setText(1, self._curve_status(source, column, curve))
+        brush = QBrush(QColor(curve.color)) if curve and curve.visible else QBrush()
+        item.setForeground(0, brush)
+        font = item.font(0)
+        font.setBold(is_x)
+        item.setFont(0, font)
+
+    def _show_source_tree_menu(self, position: Any) -> None:
+        item = self.source_tree.itemAt(position)
+        if item is None:
+            return
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data or data[0] != "curve":
+            return
+        source_id, column_id = data[1], data[2]
+        menu = QMenu(self.source_tree)
+        action = menu.addAction("Set as X axis")
+        action.setEnabled(
+            self.project.source_x_columns.get(source_id) != column_id
+        )
+        action.triggered.connect(
+            lambda _checked=False: self._set_source_x(source_id, column_id)
+        )
+        menu.exec(self.source_tree.viewport().mapToGlobal(position))
+
+    def _toggle_source_y_item(self, item: QTreeWidgetItem, _column: int) -> None:
+        data = item.data(0, Qt.ItemDataRole.UserRole)
+        if not data or data[0] != "curve":
+            return
+        source_id, y_column_id = data[1], data[2]
+        if self.project.source_x_columns.get(source_id) == y_column_id:
+            self.statusBar().showMessage(
+                "The X-axis column cannot also be plotted as Y.", 5_000
+            )
+            return
+        curve = self.project.curves.get(stable_curve_id(source_id, y_column_id))
+        self._set_source_y(source_id, y_column_id, not (curve and curve.visible))
+
     def _set_source_y(
         self, source_id: str, y_column_id: str, visible: bool
     ) -> None:
+        if visible and self.project.source_x_columns.get(source_id) == y_column_id:
+            return
         curve_id = stable_curve_id(source_id, y_column_id)
         curve = self.project.curves.get(curve_id)
         if curve is None:
@@ -794,10 +825,9 @@ class MainWindow(QMainWindow):
             curve.x_column_id = self.project.source_x_columns[source_id]
         source = self.project.sources[source_id]
         column = next(col for col in source.columns if col.column_id == y_column_id)
-        item = self._curve_items.get((source_id, y_column_id))
-        if item is not None:
-            item.setText(1, self._curve_status(column, curve))
+        self._update_curve_item(source, column, curve)
         self.plot.render_project(self.project)
+        self._selection_changed()
 
     def _set_source_x(self, source_id: str, column_id: str) -> None:
         if not column_id:
@@ -809,29 +839,11 @@ class MainWindow(QMainWindow):
                 if curve.y_column_id == column_id:
                     curve.visible = False
         source = self.project.sources[source_id]
-        selected_y = {
-            curve.y_column_id
-            for curve in self.project.curves.values()
-            if curve.source_id == source_id and curve.visible
-        }
-        selector = self._source_y_selectors[source_id]
-        selector.configure(
-            [
-                (self._column_label(source, column.column_id), column.column_id)
-                for column in source.numeric_columns
-                if column.column_id != column_id
-            ],
-            selected_y,
-            lambda y_column_id, checked, sid=source_id: self._set_source_y(
-                sid, y_column_id, checked
-            ),
-        )
         for column in source.numeric_columns:
-            item = self._curve_items.get((source_id, column.column_id))
             curve = self.project.curves.get(stable_curve_id(source_id, column.column_id))
-            if item is not None:
-                item.setText(1, self._curve_status(column, curve))
+            self._update_curve_item(source, column, curve)
         self.plot.render_project(self.project)
+        self._selection_changed()
 
     def _selected_curves(self) -> list[Curve]:
         selected: list[Curve] = []
@@ -848,7 +860,7 @@ class MainWindow(QMainWindow):
         self.selection_summary.setText(
             f"{len(curves)} curve{'s' if len(curves) != 1 else ''} selected"
             if curves
-            else "Select a checked signal row to edit it."
+            else "Select a plotted signal row to edit it."
         )
         if not curves:
             return
@@ -919,6 +931,13 @@ class MainWindow(QMainWindow):
             return
         for curve in curves:
             curve.color = color.name()
+            source = self.project.sources[curve.source_id]
+            column = next(
+                column
+                for column in source.columns
+                if column.column_id == curve.y_column_id
+            )
+            self._update_curve_item(source, column, curve)
         self.color_button.setStyleSheet(f"background: {color.name()};")
         self.plot.render_project(self.project)
 
