@@ -17,6 +17,12 @@ The system SHALL expose available Y columns in a compact multi-select dropdown a
 - **WHEN** the user checks multiple Y columns across sources
 - **THEN** each chosen signal is displayed with an identifiable legend entry.
 
+### Requirement: Separate mapping and signal inventory
+The system SHALL present X/Y axis mapping controls separately from the source's available-signal inventory.
+#### Scenario: Inspect a loaded source
+- **WHEN** a source is expanded in the left panel
+- **THEN** axis selectors appear under `Axis mapping` and file columns appear under `Available signals`.
+
 ### Requirement: Stable curve identity
 The system SHALL identify curves by source and column IDs, not by display label alone.
 #### Scenario: Duplicate headers across files

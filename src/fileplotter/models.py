@@ -24,11 +24,22 @@ DEFAULT_PLOT_CONFIG: dict[str, Any] = {
     "x_tick_count": 6,
     "primary_y_tick_count": 6,
     "secondary_y_tick_count": 6,
+    "minor_tick_count": 4,
     "tick_font_size": 9.0,
     "axis_label_font_size": 11.0,
     "title_font_size": 14.0,
     "legend_font_size": 9.0,
     "tick_length": -5,
+    "secondary_y_axis_visible": True,
+    "x_auto_range": True,
+    "x_min": 0.0,
+    "x_max": 1.0,
+    "primary_y_auto_range": True,
+    "primary_y_min": 0.0,
+    "primary_y_max": 1.0,
+    "secondary_y_auto_range": True,
+    "secondary_y_min": 0.0,
+    "secondary_y_max": 1.0,
 }
 
 

@@ -8,6 +8,7 @@
 - [x] Add a right-side plot customization tab with persistent title, axes, background, grid, legend and line-width settings.
 - [x] Replace per-row Y checkboxes with source-level X and multi-select Y controls.
 - [x] Add advanced tick/font/color settings, application-folder defaults and clipboard plot copy.
+- [x] Separate axis mapping from available signals and add secondary-axis, minor-tick and manual-range controls.
 - [x] Add focused tests for import, duplicate column names and different-length X arrays.
 
 ## Phase 2 — Curve operations

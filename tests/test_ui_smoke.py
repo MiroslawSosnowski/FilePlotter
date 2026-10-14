@@ -1,6 +1,7 @@
 from pathlib import Path
 from dataclasses import replace
 
+import pytest
 from PyQt6.QtWidgets import QApplication
 
 from fileplotter.app import MainWindow
@@ -23,6 +24,9 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
     window._source_loaded(source)
     _select_all_y(window, source.source_id)
 
+    root = window.source_tree.topLevelItem(0)
+    assert root.child(0).text(0) == "Axis mapping"
+    assert root.child(1).text(0) == "Available signals"
     assert window.plot_title.text() == "signals.csv"
     assert window.project.plot_config["title"] == "signals.csv"
     assert len(window.project.curves) == 2
@@ -52,7 +56,8 @@ def test_batch_transform_preserves_unedited_values_and_reset(qtbot, tmp_path: Pa
     window._source_loaded(source)
     root = window.source_tree.topLevelItem(0)
     _select_all_y(window, source.source_id)
-    first_item, second_item = root.child(3), root.child(4)
+    signals_group = root.child(1)
+    first_item, second_item = signals_group.child(1), signals_group.child(2)
     curves = list(window.project.curves.values())
     curves[0].transform = replace(curves[0].transform, x_shift=1)
     curves[1].transform = replace(curves[1].transform, x_shift=2)
@@ -97,8 +102,16 @@ def test_plot_customization_tab_applies_and_resets_settings(
     window.plot_grid_alpha.setValue(0.4)
     window.plot_line_width.setValue(2.5)
     window.plot_x_tick_count.setValue(8)
+    window.plot_minor_tick_count.setValue(2)
     window.plot_tick_font_size.setValue(12)
     window.plot_title_font_size.setValue(18)
+    window.plot_secondary_y_axis.setChecked(False)
+    window.plot_x_auto_range.setChecked(False)
+    window.plot_range_inputs["x_min"].setValue(-1)
+    window.plot_range_inputs["x_max"].setValue(3)
+    window.plot_primary_y_auto_range.setChecked(False)
+    window.plot_range_inputs["primary_y_min"].setValue(0)
+    window.plot_range_inputs["primary_y_max"].setValue(5)
     window._pending_plot_background = "#20242b"
     window._pending_plot_foreground = "#f3f4f6"
 
@@ -110,8 +123,15 @@ def test_plot_customization_tab_applies_and_resets_settings(
     assert window.project.plot_config["grid"] is False
     assert window.project.plot_config["legend"] is False
     assert window.project.plot_config["x_tick_count"] == 8
+    assert window.project.plot_config["minor_tick_count"] == 2
     assert window.project.plot_config["tick_font_size"] == 12
+    assert window.project.plot_config["secondary_y_axis_visible"] is False
+    assert window.project.plot_config["x_auto_range"] is False
     assert window.plot.legend.isVisible() is False
+    assert window.plot.plot_item.getAxis("right").isVisible() is False
+    assert window.plot.plot_item.vb.viewRange()[0] == pytest.approx([-1, 3])
+    assert window.plot.plot_item.vb.viewRange()[1] == pytest.approx([0, 5])
+    assert len(window.plot.plot_item.getAxis("bottom")._tickSpacing) == 2
     assert window.plot._items[0][0].opts["pen"].widthF() == 2.5
 
     second_path = tmp_path / "second.csv"
@@ -126,3 +146,19 @@ def test_plot_customization_tab_applies_and_resets_settings(
     window._reset_plot_settings()
 
     assert window.project.plot_config == default_plot_config()
+
+
+def test_manual_plot_range_rejects_reversed_limits(qtbot, monkeypatch) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    errors: list[str] = []
+    monkeypatch.setattr(window, "_error", errors.append)
+    original = dict(window.project.plot_config)
+    window.plot_x_auto_range.setChecked(False)
+    window.plot_range_inputs["x_min"].setValue(5)
+    window.plot_range_inputs["x_max"].setValue(1)
+
+    window._apply_plot_settings()
+
+    assert errors == ["X minimum must be smaller than maximum."]
+    assert window.project.plot_config == original

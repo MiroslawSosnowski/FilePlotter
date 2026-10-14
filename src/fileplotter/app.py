@@ -160,6 +160,7 @@ class PlotCanvas(pg.PlotWidget):
         self.legend = self.plot_item.addLegend(offset=(12, 12))
         self._items: list[tuple[pg.PlotDataItem, str]] = []
         self._tick_counts = (6, 6, 6)
+        self._minor_tick_count = 4
         self.plot_item.vb.sigResized.connect(self._sync_secondary)
         self.plot_item.vb.sigRangeChanged.connect(self._update_tick_spacing)
         self.secondary.sigRangeChanged.connect(self._update_tick_spacing)
@@ -209,6 +210,8 @@ class PlotCanvas(pg.PlotWidget):
             item.setClipToView(True)
             self.legend.addItem(item, curve.display_label)
             self._items.append((item, curve.axis))
+        self._apply_ranges(project.plot_config)
+        self._update_tick_spacing()
 
     def apply_config(self, raw_config: dict[str, Any]) -> None:
         config = default_plot_config()
@@ -235,6 +238,9 @@ class PlotCanvas(pg.PlotWidget):
         self.plot_item.getAxis("right").setLabel(
             str(config["secondary_y_label"]), **label_style
         )
+        self.plot_item.showAxis(
+            "right", show=bool(config["secondary_y_axis_visible"])
+        )
         tick_font = QFont()
         tick_font.setPointSizeF(tick_size)
         tick_length = int(config["tick_length"])
@@ -248,6 +254,7 @@ class PlotCanvas(pg.PlotWidget):
             max(2, int(config["primary_y_tick_count"])),
             max(2, int(config["secondary_y_tick_count"])),
         )
+        self._minor_tick_count = max(0, int(config["minor_tick_count"]))
         self._update_tick_spacing()
         self.legend.setLabelTextSize(f"{max(6.0, float(config['legend_font_size'])):g}pt")
         self.legend.setVisible(bool(config["legend"]))
@@ -266,7 +273,41 @@ class PlotCanvas(pg.PlotWidget):
                 axis.setTickSpacing()
                 continue
             major = span / max(1, count - 1)
-            axis.setTickSpacing(major=major, minor=major / 5.0)
+            levels = [(major, 0.0)]
+            if self._minor_tick_count:
+                levels.append((major / (self._minor_tick_count + 1), 0.0))
+            axis.setTickSpacing(levels=levels)
+
+    def _apply_ranges(self, raw_config: dict[str, Any]) -> None:
+        config = default_plot_config()
+        config.update(raw_config)
+        primary = self.plot_item.vb
+        primary.enableAutoRange(
+            axis=primary.XAxis, enable=bool(config["x_auto_range"])
+        )
+        primary.enableAutoRange(
+            axis=primary.YAxis, enable=bool(config["primary_y_auto_range"])
+        )
+        self.secondary.enableAutoRange(
+            axis=self.secondary.YAxis,
+            enable=bool(config["secondary_y_auto_range"]),
+        )
+        if not config["x_auto_range"]:
+            primary.setXRange(float(config["x_min"]), float(config["x_max"]), padding=0)
+        if not config["primary_y_auto_range"]:
+            primary.setYRange(
+                float(config["primary_y_min"]),
+                float(config["primary_y_max"]),
+                padding=0,
+            )
+        if not config["secondary_y_auto_range"]:
+            self.secondary.setYRange(
+                float(config["secondary_y_min"]),
+                float(config["secondary_y_max"]),
+                padding=0,
+            )
+        primary.updateAutoRange()
+        self.secondary.updateAutoRange()
 
     def auto_fit(self) -> None:
         self.plot_item.enableAutoRange()
@@ -392,6 +433,7 @@ class MainWindow(QMainWindow):
         self.plot_foreground_button.clicked.connect(self._choose_plot_foreground)
         self.plot_grid = QCheckBox("Show grid")
         self.plot_legend = QCheckBox("Show legend")
+        self.plot_secondary_y_axis = QCheckBox("Show secondary Y axis")
         self.plot_grid_alpha = QDoubleSpinBox()
         self.plot_grid_alpha.setRange(0.0, 1.0)
         self.plot_grid_alpha.setSingleStep(0.05)
@@ -409,6 +451,9 @@ class MainWindow(QMainWindow):
             self.plot_secondary_y_tick_count,
         ):
             spin.setRange(2, 20)
+        self.plot_minor_tick_count = QSpinBox()
+        self.plot_minor_tick_count.setRange(0, 10)
+        self.plot_minor_tick_count.setSpecialValueText("None")
         self.plot_tick_font_size = QDoubleSpinBox()
         self.plot_axis_label_font_size = QDoubleSpinBox()
         self.plot_title_font_size = QDoubleSpinBox()
@@ -437,6 +482,7 @@ class MainWindow(QMainWindow):
         plot_form.addRow("X major ticks", self.plot_x_tick_count)
         plot_form.addRow("Primary Y major ticks", self.plot_primary_y_tick_count)
         plot_form.addRow("Secondary Y major ticks", self.plot_secondary_y_tick_count)
+        plot_form.addRow("Minor ticks between majors", self.plot_minor_tick_count)
         plot_form.addRow("Tick font size", self.plot_tick_font_size)
         plot_form.addRow("Axis label size", self.plot_axis_label_font_size)
         plot_form.addRow("Title size", self.plot_title_font_size)
@@ -445,6 +491,55 @@ class MainWindow(QMainWindow):
         plot_layout.addLayout(plot_form)
         plot_layout.addWidget(self.plot_grid)
         plot_layout.addWidget(self.plot_legend)
+        plot_layout.addWidget(self.plot_secondary_y_axis)
+
+        plot_layout.addWidget(QLabel("Axis ranges"))
+        range_form = QFormLayout()
+        range_form.setRowWrapPolicy(QFormLayout.RowWrapPolicy.WrapAllRows)
+        range_form.setFieldGrowthPolicy(
+            QFormLayout.FieldGrowthPolicy.AllNonFixedFieldsGrow
+        )
+        self.plot_x_auto_range = QCheckBox("Auto X range")
+        self.plot_primary_y_auto_range = QCheckBox("Auto primary Y range")
+        self.plot_secondary_y_auto_range = QCheckBox("Auto secondary Y range")
+        self.plot_range_inputs: dict[str, QDoubleSpinBox] = {}
+        for key in (
+            "x_min",
+            "x_max",
+            "primary_y_min",
+            "primary_y_max",
+            "secondary_y_min",
+            "secondary_y_max",
+        ):
+            spin = QDoubleSpinBox()
+            spin.setRange(-1e100, 1e100)
+            spin.setDecimals(8)
+            spin.setKeyboardTracking(False)
+            self.plot_range_inputs[key] = spin
+        range_form.addRow(self.plot_x_auto_range)
+        range_form.addRow("X minimum", self.plot_range_inputs["x_min"])
+        range_form.addRow("X maximum", self.plot_range_inputs["x_max"])
+        range_form.addRow(self.plot_primary_y_auto_range)
+        range_form.addRow(
+            "Primary Y minimum", self.plot_range_inputs["primary_y_min"]
+        )
+        range_form.addRow(
+            "Primary Y maximum", self.plot_range_inputs["primary_y_max"]
+        )
+        range_form.addRow(self.plot_secondary_y_auto_range)
+        range_form.addRow(
+            "Secondary Y minimum", self.plot_range_inputs["secondary_y_min"]
+        )
+        range_form.addRow(
+            "Secondary Y maximum", self.plot_range_inputs["secondary_y_max"]
+        )
+        plot_layout.addLayout(range_form)
+        for checkbox in (
+            self.plot_x_auto_range,
+            self.plot_primary_y_auto_range,
+            self.plot_secondary_y_auto_range,
+        ):
+            checkbox.toggled.connect(self._update_range_control_states)
         apply_plot = QPushButton("Apply plot settings")
         apply_plot.clicked.connect(self._apply_plot_settings)
         reset_plot = QPushButton("Reset plot settings")
@@ -576,8 +671,10 @@ class MainWindow(QMainWindow):
             numeric = source.numeric_columns
             if not numeric:
                 continue
+            mapping_group = QTreeWidgetItem(["Axis mapping", ""])
+            root.addChild(mapping_group)
             x_row = QTreeWidgetItem(["X axis", ""])
-            root.addChild(x_row)
+            mapping_group.addChild(x_row)
             x_combo = QComboBox()
             for column in numeric:
                 x_combo.addItem(self._column_label(source, column.column_id), column.column_id)
@@ -605,7 +702,7 @@ class MainWindow(QMainWindow):
             self._source_x_selectors[source.source_id] = x_combo
 
             y_row = QTreeWidgetItem(["Y signals", ""])
-            root.addChild(y_row)
+            mapping_group.addChild(y_row)
             y_selector = YSignalSelector()
             selected_y = {
                 curve.y_column_id
@@ -626,6 +723,8 @@ class MainWindow(QMainWindow):
             self.source_tree.setItemWidget(y_row, 1, y_selector)
             self._source_y_selectors[source.source_id] = y_selector
 
+            signals_group = QTreeWidgetItem(["Available signals", ""])
+            root.addChild(signals_group)
             for column in numeric:
                 curve_id = stable_curve_id(source.source_id, column.column_id)
                 curve = self.project.curves.get(curve_id)
@@ -640,9 +739,11 @@ class MainWindow(QMainWindow):
                     Qt.ItemDataRole.UserRole,
                     ("curve", source.source_id, column.column_id),
                 )
-                root.addChild(item)
+                signals_group.addChild(item)
                 self._curve_items[(source.source_id, column.column_id)] = item
             root.setExpanded(True)
+            mapping_group.setExpanded(True)
+            signals_group.setExpanded(True)
         self.source_tree.blockSignals(False)
 
     def _column_label(self, source: DataSource, column_id: str) -> str:
@@ -827,6 +928,7 @@ class MainWindow(QMainWindow):
         self.plot_x_tick_count.setValue(int(config["x_tick_count"]))
         self.plot_primary_y_tick_count.setValue(int(config["primary_y_tick_count"]))
         self.plot_secondary_y_tick_count.setValue(int(config["secondary_y_tick_count"]))
+        self.plot_minor_tick_count.setValue(int(config["minor_tick_count"]))
         self.plot_tick_font_size.setValue(float(config["tick_font_size"]))
         self.plot_axis_label_font_size.setValue(
             float(config["axis_label_font_size"])
@@ -834,6 +936,19 @@ class MainWindow(QMainWindow):
         self.plot_title_font_size.setValue(float(config["title_font_size"]))
         self.plot_legend_font_size.setValue(float(config["legend_font_size"]))
         self.plot_tick_length.setValue(int(config["tick_length"]))
+        self.plot_secondary_y_axis.setChecked(
+            bool(config["secondary_y_axis_visible"])
+        )
+        self.plot_x_auto_range.setChecked(bool(config["x_auto_range"]))
+        self.plot_primary_y_auto_range.setChecked(
+            bool(config["primary_y_auto_range"])
+        )
+        self.plot_secondary_y_auto_range.setChecked(
+            bool(config["secondary_y_auto_range"])
+        )
+        for key, spin in self.plot_range_inputs.items():
+            spin.setValue(float(config[key]))
+        self._update_range_control_states()
         self._pending_plot_background = str(config["background"])
         self._pending_plot_foreground = str(config["foreground"])
         self.plot_background_button.setStyleSheet(
@@ -842,6 +957,30 @@ class MainWindow(QMainWindow):
         self.plot_foreground_button.setStyleSheet(
             f"background: {self._pending_plot_foreground};"
         )
+
+    def _update_range_control_states(self, _checked: bool | None = None) -> None:
+        for prefix, automatic in (
+            ("x", self.plot_x_auto_range.isChecked()),
+            ("primary_y", self.plot_primary_y_auto_range.isChecked()),
+            ("secondary_y", self.plot_secondary_y_auto_range.isChecked()),
+        ):
+            self.plot_range_inputs[f"{prefix}_min"].setEnabled(not automatic)
+            self.plot_range_inputs[f"{prefix}_max"].setEnabled(not automatic)
+
+    def _manual_ranges_are_valid(self) -> bool:
+        for label, prefix, automatic in (
+            ("X", "x", self.plot_x_auto_range.isChecked()),
+            ("Primary Y", "primary_y", self.plot_primary_y_auto_range.isChecked()),
+            ("Secondary Y", "secondary_y", self.plot_secondary_y_auto_range.isChecked()),
+        ):
+            if automatic:
+                continue
+            minimum = self.plot_range_inputs[f"{prefix}_min"].value()
+            maximum = self.plot_range_inputs[f"{prefix}_max"].value()
+            if minimum >= maximum:
+                self._error(f"{label} minimum must be smaller than maximum.")
+                return False
+        return True
 
     def _choose_plot_background(self) -> None:
         from PyQt6.QtWidgets import QColorDialog
@@ -870,6 +1009,8 @@ class MainWindow(QMainWindow):
         )
 
     def _apply_plot_settings(self) -> None:
+        if not self._manual_ranges_are_valid():
+            return
         self.project.plot_config.update(
             {
                 "title": self.plot_title.text().strip(),
@@ -885,11 +1026,22 @@ class MainWindow(QMainWindow):
                 "x_tick_count": self.plot_x_tick_count.value(),
                 "primary_y_tick_count": self.plot_primary_y_tick_count.value(),
                 "secondary_y_tick_count": self.plot_secondary_y_tick_count.value(),
+                "minor_tick_count": self.plot_minor_tick_count.value(),
                 "tick_font_size": self.plot_tick_font_size.value(),
                 "axis_label_font_size": self.plot_axis_label_font_size.value(),
                 "title_font_size": self.plot_title_font_size.value(),
                 "legend_font_size": self.plot_legend_font_size.value(),
                 "tick_length": self.plot_tick_length.value(),
+                "secondary_y_axis_visible": self.plot_secondary_y_axis.isChecked(),
+                "x_auto_range": self.plot_x_auto_range.isChecked(),
+                "x_min": self.plot_range_inputs["x_min"].value(),
+                "x_max": self.plot_range_inputs["x_max"].value(),
+                "primary_y_auto_range": self.plot_primary_y_auto_range.isChecked(),
+                "primary_y_min": self.plot_range_inputs["primary_y_min"].value(),
+                "primary_y_max": self.plot_range_inputs["primary_y_max"].value(),
+                "secondary_y_auto_range": self.plot_secondary_y_auto_range.isChecked(),
+                "secondary_y_min": self.plot_range_inputs["secondary_y_min"].value(),
+                "secondary_y_max": self.plot_range_inputs["secondary_y_max"].value(),
             }
         )
         self.plot.render_project(self.project)

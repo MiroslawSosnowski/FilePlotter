@@ -26,7 +26,7 @@ The system SHALL keep UI interaction responsive for large datasets through async
 - **THEN** loading progress and errors are visible and the main UI is not blocked by file parsing.
 
 ### Requirement: Plot appearance customization
-The system SHALL provide a dedicated right-side tab for editing the plot title, axis labels, background and foreground colors, grid, legend, global line width, major tick counts, tick length, and title, label, tick, and legend font sizes. The system SHALL persist those settings in both the project and an application-folder defaults file.
+The system SHALL provide a dedicated right-side tab for editing the plot title, axis labels, background and foreground colors, grid, legend, global line width, major and minor tick counts, tick length, secondary-axis visibility, automatic or manual X/Y ranges, and title, label, tick, and legend font sizes. The system SHALL persist those settings in both the project and an application-folder defaults file.
 #### Scenario: Customize and reopen a plot
 - **WHEN** the user applies custom plot appearance settings and saves the project
 - **THEN** the plot updates immediately and the same appearance is restored when the project is reopened.
@@ -38,6 +38,14 @@ The system SHALL provide a dedicated right-side tab for editing the plot title, 
 #### Scenario: Reuse application defaults
 - **WHEN** the user applies appearance settings without opening a saved project
 - **THEN** the settings are written to `plot_settings.json` beside the application and loaded on the next launch.
+
+#### Scenario: Manual axis ranges
+- **WHEN** automatic range is disabled for X, primary Y, or secondary Y and valid minimum and maximum values are applied
+- **THEN** the corresponding view uses the requested range and restores it when reopened.
+
+#### Scenario: Hide secondary Y axis
+- **WHEN** secondary Y-axis visibility is disabled
+- **THEN** the right-side axis is hidden without removing configured curves.
 
 ### Requirement: Clipboard export
 The system SHALL copy the currently rendered plot as an image to the operating-system clipboard.
