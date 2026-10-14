@@ -1,26 +1,46 @@
 from pathlib import Path
 from dataclasses import replace
 
-from PyQt6.QtCore import Qt
+from PyQt6.QtWidgets import QApplication
 
 from fileplotter.app import MainWindow
 from fileplotter.importers import DataSourceLoader
 from fileplotter.models import default_plot_config
 
 
-def test_source_tree_checkbox_creates_curve_and_plot(qtbot, tmp_path: Path) -> None:
+def _select_all_y(window: MainWindow, source_id: str) -> None:
+    for action in window._source_y_selectors[source_id].menu().actions():
+        action.setChecked(True)
+
+
+def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> None:
     path = tmp_path / "signals.csv"
-    path.write_text("t,signal\n0,2\n1,4\n", encoding="utf-8")
+    path.write_text("t,signal,x2\n0,2,10\n1,4,20\n", encoding="utf-8")
     source = DataSourceLoader().load(path)
     window = MainWindow()
     qtbot.addWidget(window)
 
     window._source_loaded(source)
-    signal_item = window.source_tree.topLevelItem(0).child(2)
-    signal_item.setCheckState(0, Qt.CheckState.Checked)
+    _select_all_y(window, source.source_id)
 
-    assert len(window.project.curves) == 1
-    assert len(window.plot._items) == 1
+    assert window.plot_title.text() == "signals.csv"
+    assert window.project.plot_config["title"] == "signals.csv"
+    assert len(window.project.curves) == 2
+    assert len(window.plot._items) == 2
+    x_selector = window._source_x_selectors[source.source_id]
+    x_selector.setCurrentIndex(x_selector.findData("col_0002"))
+    assert window.project.source_x_columns[source.source_id] == "col_0002"
+    assert all(
+        curve.x_column_id == "col_0002"
+        for curve in window.project.curves.values()
+    )
+    assert not window.project.curves[
+        next(
+            curve_id
+            for curve_id, curve in window.project.curves.items()
+            if curve.y_column_id == "col_0002"
+        )
+    ].visible
 
 
 def test_batch_transform_preserves_unedited_values_and_reset(qtbot, tmp_path: Path) -> None:
@@ -31,9 +51,8 @@ def test_batch_transform_preserves_unedited_values_and_reset(qtbot, tmp_path: Pa
     qtbot.addWidget(window)
     window._source_loaded(source)
     root = window.source_tree.topLevelItem(0)
-    first_item, second_item = root.child(2), root.child(3)
-    first_item.setCheckState(0, Qt.CheckState.Checked)
-    second_item.setCheckState(0, Qt.CheckState.Checked)
+    _select_all_y(window, source.source_id)
+    first_item, second_item = root.child(3), root.child(4)
     curves = list(window.project.curves.values())
     curves[0].transform = replace(curves[0].transform, x_shift=1)
     curves[1].transform = replace(curves[1].transform, x_shift=2)
@@ -51,14 +70,20 @@ def test_batch_transform_preserves_unedited_values_and_reset(qtbot, tmp_path: Pa
     assert all(curve.transform.y_shift == 0 for curve in curves)
 
 
-def test_plot_customization_tab_applies_and_resets_settings(qtbot, tmp_path: Path) -> None:
+def test_plot_customization_tab_applies_and_resets_settings(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
     path = tmp_path / "signals.csv"
     path.write_text("t,signal\n0,2\n1,4\n", encoding="utf-8")
     window = MainWindow()
     qtbot.addWidget(window)
     window._source_loaded(DataSourceLoader().load(path))
-    signal_item = window.source_tree.topLevelItem(0).child(2)
-    signal_item.setCheckState(0, Qt.CheckState.Checked)
+    source_id = next(iter(window.project.sources))
+    _select_all_y(window, source_id)
+    monkeypatch.setattr(
+        "fileplotter.app.save_plot_settings",
+        lambda config: tmp_path / "plot_settings.json",
+    )
 
     assert window.properties_tabs.count() == 2
     assert window.properties_tabs.tabText(0) == "Curve"
@@ -71,7 +96,11 @@ def test_plot_customization_tab_applies_and_resets_settings(qtbot, tmp_path: Pat
     window.plot_legend.setChecked(False)
     window.plot_grid_alpha.setValue(0.4)
     window.plot_line_width.setValue(2.5)
+    window.plot_x_tick_count.setValue(8)
+    window.plot_tick_font_size.setValue(12)
+    window.plot_title_font_size.setValue(18)
     window._pending_plot_background = "#20242b"
+    window._pending_plot_foreground = "#f3f4f6"
 
     window._apply_plot_settings()
 
@@ -80,8 +109,19 @@ def test_plot_customization_tab_applies_and_resets_settings(qtbot, tmp_path: Pat
     assert window.project.plot_config["background"] == "#20242b"
     assert window.project.plot_config["grid"] is False
     assert window.project.plot_config["legend"] is False
+    assert window.project.plot_config["x_tick_count"] == 8
+    assert window.project.plot_config["tick_font_size"] == 12
     assert window.plot.legend.isVisible() is False
     assert window.plot._items[0][0].opts["pen"].widthF() == 2.5
+
+    second_path = tmp_path / "second.csv"
+    second_path.write_text("t,value\n0,5\n1,6\n", encoding="utf-8")
+    window._source_loaded(DataSourceLoader().load(second_path))
+    assert window.plot_title.text() == "Load comparison"
+    assert window.project.plot_config["title"] == "Load comparison"
+
+    window._copy_plot_to_clipboard()
+    assert not QApplication.clipboard().image().isNull()
 
     window._reset_plot_settings()
 

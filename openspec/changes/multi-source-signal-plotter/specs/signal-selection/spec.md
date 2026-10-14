@@ -2,13 +2,17 @@
 
 ## ADDED Requirements
 ### Requirement: Independent X column
-The system SHALL allow each source to define its own X column, with a per-curve override when required.
+The system SHALL allow each source to define one X column that is shared by every selected Y signal from that source.
 #### Scenario: Different sampling rates
 - **WHEN** two files use different time vectors and lengths
 - **THEN** their curves overlay on the same plot without forced resampling or index-based alignment.
 
-### Requirement: Checkbox Y selection
-The system SHALL expose available Y columns as checkboxes and update plotted curves when visibility changes.
+#### Scenario: Change source X mapping
+- **WHEN** the user changes the X selector for a source
+- **THEN** every selected Y signal from that source is immediately plotted against the new X column.
+
+### Requirement: Multi-select Y selection
+The system SHALL expose available Y columns in a compact multi-select dropdown and update plotted curves when visibility changes.
 #### Scenario: Select multiple signals
 - **WHEN** the user checks multiple Y columns across sources
 - **THEN** each chosen signal is displayed with an identifiable legend entry.

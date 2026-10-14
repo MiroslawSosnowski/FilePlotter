@@ -38,6 +38,7 @@ def save_project(project: Project, path: str | Path) -> None:
         "version": PROJECT_VERSION,
         "sources": sources,
         "curves": [curve.to_dict() for curve in project.curves.values()],
+        "source_x_columns": project.source_x_columns,
         "plot_config": project.plot_config,
     }
     project_path.write_text(
@@ -68,7 +69,13 @@ def load_project(
     active_loader = loader or DataSourceLoader()
     plot_config = default_plot_config()
     plot_config.update(dict(payload.get("plot_config") or {}))
-    project = Project(plot_config=plot_config)
+    source_x_columns = payload.get("source_x_columns") or {}
+    if not isinstance(source_x_columns, dict):
+        raise ProjectFormatError("Project source_x_columns must be an object.")
+    project = Project(
+        source_x_columns={str(key): str(value) for key, value in source_x_columns.items()},
+        plot_config=plot_config,
+    )
     warnings: list[str] = []
     for descriptor in payload["sources"]:
         _validate_source_descriptor(descriptor)

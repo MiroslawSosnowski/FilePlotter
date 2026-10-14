@@ -19,7 +19,11 @@ def _project_from_csv(path: Path) -> Project:
         display_label="Load",
         transform=Transform(x_scale=0.5, x_shift=2, y_scale=3, y_shift=-1),
     )
-    return Project(sources={source.source_id: source}, curves={curve.curve_id: curve})
+    return Project(
+        sources={source.source_id: source},
+        curves={curve.curve_id: curve},
+        source_x_columns={source.source_id: "col_0000"},
+    )
 
 
 def test_project_round_trip_and_moved_source_relink(tmp_path: Path) -> None:
@@ -50,6 +54,7 @@ def test_project_round_trip_and_moved_source_relink(tmp_path: Path) -> None:
     restored_curve = next(iter(restored.curves.values()))
     assert restored_curve.transform == next(iter(project.curves.values())).transform
     assert restored.sources[restored_curve.source_id].path == moved.resolve()
+    assert restored.source_x_columns == project.source_x_columns
     assert restored.plot_config == project.plot_config
 
 

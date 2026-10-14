@@ -16,10 +16,19 @@ DEFAULT_PLOT_CONFIG: dict[str, Any] = {
     "primary_y_label": "Primary Y",
     "secondary_y_label": "Secondary Y",
     "background": "#111827",
+    "foreground": "#d1d5db",
     "grid": True,
     "grid_alpha": 0.25,
     "legend": True,
     "line_width": 1.6,
+    "x_tick_count": 6,
+    "primary_y_tick_count": 6,
+    "secondary_y_tick_count": 6,
+    "tick_font_size": 9.0,
+    "axis_label_font_size": 11.0,
+    "title_font_size": 14.0,
+    "legend_font_size": 9.0,
+    "tick_length": -5,
 }
 
 
@@ -162,6 +171,7 @@ class Curve:
 class Project:
     sources: dict[str, DataSource] = field(default_factory=dict)
     curves: dict[str, Curve] = field(default_factory=dict)
+    source_x_columns: dict[str, str] = field(default_factory=dict)
     plot_config: dict[str, Any] = field(default_factory=default_plot_config)
     version: int = PROJECT_VERSION
 

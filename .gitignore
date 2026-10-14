@@ -8,3 +8,4 @@ dist/
 *.egg-info/
 graphify-out/
 artifacts/
+plot_settings.json

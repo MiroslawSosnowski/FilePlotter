@@ -21,12 +21,18 @@ You can also pass a saved project directly to `run.cmd`.
 1. Use **File → Add source** and select one or more `.csv` or `.xlsx` files.
 2. For Excel, choose a worksheet; for every source, choose the one-based header
    row.
-3. Choose a source X column and check any Y signals in the source tree.
-4. Select one or more checked signals to edit X/Y shift and scale, color, line
-   style, X override, or primary/secondary Y-axis assignment.
-5. Use the **Plot** tab on the right to edit the title, axis labels, background,
-   grid, legend and global line width.
-6. Save a `.fplot.json` project or export a full-resolution transformed CSV,
+3. Choose one X column per source, then use the **Y signals** dropdown to select
+   any number of Y signals. Every selected Y from that source uses the chosen X.
+   The first file name becomes the plot title automatically and remains editable.
+4. Select one or more plotted signals to edit X/Y shift and scale, color, line
+   style, or primary/secondary Y-axis assignment.
+5. Use the scrollable **Plot** tab to edit titles, colors, grid, legend, line
+   width, major tick counts, tick length, and font sizes.
+6. **Apply plot settings** also saves defaults to `plot_settings.json` beside
+   the application. A project keeps its own plot settings when saved.
+7. Use **Copy plot to clipboard** or `Ctrl+Shift+C` to paste the rendered plot
+   into another application.
+8. Save a `.fplot.json` project or export a full-resolution transformed CSV,
    PNG, or SVG.
 
 Blank, non-numeric, NaN, and infinite samples are reported as gaps and excluded
