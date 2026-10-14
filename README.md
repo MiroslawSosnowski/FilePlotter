@@ -9,10 +9,11 @@ input files.
 
 ```powershell
 py -3.12 -m venv .venv
-.\.venv\Scripts\python.exe -X utf8 -m pip install -e ".[test]"
 .\run.cmd
 ```
 
+The application entry point is `main.py`. `run.cmd` invokes it directly with the
+existing `.venv`; FilePlotter itself does not need to be installed as a package.
 You can also pass a saved project directly to `run.cmd`.
 
 ## Workflow
