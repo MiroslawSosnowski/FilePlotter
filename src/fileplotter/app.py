@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import math
 import sys
 from dataclasses import replace
@@ -8,7 +9,7 @@ from pathlib import Path
 from typing import Any
 
 import pyqtgraph as pg
-from PyQt6.QtCore import QObject, QThread, Qt, pyqtSignal, pyqtSlot
+from PyQt6.QtCore import QObject, QProcess, QThread, Qt, pyqtSignal, pyqtSlot
 from PyQt6.QtGui import (
     QAction,
     QBrush,
@@ -75,6 +76,34 @@ PEN_STYLES = {
     "dot": Qt.PenStyle.DotLine,
     "dashdot": Qt.PenStyle.DashDotLine,
 }
+APP_ROOT = Path(__file__).resolve().parents[2]
+
+
+def is_frozen_build() -> bool:
+    return bool(getattr(sys, "frozen", False))
+
+
+def pyinstaller_arguments(app_root: Path = APP_ROOT) -> list[str]:
+    build_dir = app_root / "build"
+    return [
+        "-m",
+        "PyInstaller",
+        "--noconfirm",
+        "--clean",
+        "--onefile",
+        "--windowed",
+        "--name",
+        "FilePlotter",
+        "--paths",
+        str(app_root / "src"),
+        "--distpath",
+        str(app_root / "dist"),
+        "--workpath",
+        str(build_dir / "work"),
+        "--specpath",
+        str(build_dir),
+        str(app_root / "main.py"),
+    ]
 
 
 class ImportWorker(QObject):
@@ -338,6 +367,11 @@ class MainWindow(QMainWindow):
         self.project = Project(plot_config=app_plot_config)
         self.project_path: Path | None = None
         self._jobs: list[tuple[QThread, ImportWorker, QProgressDialog]] = []
+        self._build_process: QProcess | None = None
+        self._build_dialog: QProgressDialog | None = None
+        self._build_output: list[str] = []
+        self._build_cancelled = False
+        self.build_action: QAction | None = None
         self._dirty_transform_fields: set[str] = set()
         self._updating_controls = False
         self._curve_items: dict[tuple[str, str], QTreeWidgetItem] = {}
@@ -599,10 +633,114 @@ class MainWindow(QMainWindow):
             action.setShortcut(shortcut)
             action.triggered.connect(slot)
             file_menu.addAction(action)
+        if not is_frozen_build():
+            file_menu.addSeparator()
+            self.build_action = QAction("Build executable…", self)
+            self.build_action.triggered.connect(self._build_executable)
+            file_menu.addAction(self.build_action)
         file_menu.addSeparator()
         quit_action = QAction("Quit", self)
         quit_action.triggered.connect(self.close)
         file_menu.addAction(quit_action)
+
+    def _build_executable(self) -> None:
+        if self._build_process is not None:
+            self.statusBar().showMessage("An executable build is already running.", 5000)
+            return
+        if importlib.util.find_spec("PyInstaller") is None:
+            self._error(
+                "PyInstaller is not installed in this Python environment.\n\n"
+                "Install the optional build tools with:\n"
+                f'"{sys.executable}" -m pip install -e ".[build]"'
+            )
+            return
+        entry_point = APP_ROOT / "main.py"
+        if not entry_point.is_file():
+            self._error(f"Could not find the application entry point:\n{entry_point}")
+            return
+
+        (APP_ROOT / "build").mkdir(parents=True, exist_ok=True)
+        self._build_output.clear()
+        self._build_cancelled = False
+        process = QProcess(self)
+        process.setWorkingDirectory(str(APP_ROOT))
+        process.setProcessChannelMode(QProcess.ProcessChannelMode.MergedChannels)
+        process.readyReadStandardOutput.connect(self._read_build_output)
+        process.errorOccurred.connect(self._build_process_error)
+        process.finished.connect(self._build_finished)
+        self._build_process = process
+
+        dialog = QProgressDialog("Building FilePlotter.exe…", "Cancel", 0, 0, self)
+        dialog.setWindowTitle("Build executable")
+        dialog.setWindowModality(Qt.WindowModality.NonModal)
+        dialog.setAutoClose(False)
+        dialog.setMinimumDuration(0)
+        dialog.canceled.connect(self._cancel_build)
+        self._build_dialog = dialog
+        if self.build_action is not None:
+            self.build_action.setEnabled(False)
+        self.statusBar().showMessage("Building FilePlotter.exe…")
+        process.start(sys.executable, pyinstaller_arguments())
+        dialog.show()
+
+    def _read_build_output(self) -> None:
+        if self._build_process is None:
+            return
+        chunk = bytes(self._build_process.readAllStandardOutput()).decode(
+            errors="replace"
+        )
+        if chunk:
+            self._build_output.extend(chunk.splitlines())
+
+    def _cancel_build(self) -> None:
+        if self._build_process is None:
+            return
+        self._build_cancelled = True
+        self.statusBar().showMessage("Cancelling executable build…")
+        self._build_process.kill()
+
+    def _build_process_error(self, error: QProcess.ProcessError) -> None:
+        if (
+            error != QProcess.ProcessError.FailedToStart
+            or self._build_process is None
+        ):
+            return
+        self._build_output.append(self._build_process.errorString())
+        self._build_finished(-1, QProcess.ExitStatus.CrashExit)
+
+    def _build_finished(
+        self, exit_code: int, _exit_status: QProcess.ExitStatus
+    ) -> None:
+        if self._build_process is None:
+            return
+        self._read_build_output()
+        process = self._build_process
+        self._build_process = None
+        if self._build_dialog is not None:
+            self._build_dialog.close()
+            self._build_dialog.deleteLater()
+            self._build_dialog = None
+        if self.build_action is not None:
+            self.build_action.setEnabled(True)
+        if process is not None:
+            process.deleteLater()
+
+        if self._build_cancelled:
+            self.statusBar().showMessage("Executable build cancelled.", 5000)
+            return
+        executable = APP_ROOT / "dist" / (
+            "FilePlotter.exe" if sys.platform == "win32" else "FilePlotter"
+        )
+        if exit_code == 0 and executable.is_file():
+            self.statusBar().showMessage(f"Built {executable}", 10_000)
+            QMessageBox.information(
+                self,
+                "Build complete",
+                f"Executable created successfully:\n{executable}",
+            )
+            return
+        details = "\n".join(self._build_output[-20:]) or "No build output was captured."
+        self._error(f"PyInstaller build failed (exit code {exit_code}).\n\n{details}")
 
     def _choose_sources(self) -> None:
         paths, _ = QFileDialog.getOpenFileNames(
@@ -1183,6 +1321,12 @@ class MainWindow(QMainWindow):
         QMessageBox.critical(self, "FilePlotter", message)
 
     def closeEvent(self, event: QCloseEvent) -> None:
+        if self._build_process is not None:
+            QMessageBox.information(
+                self, "Build running", "Cancel or wait for the executable build first."
+            )
+            event.ignore()
+            return
         if self._jobs:
             QMessageBox.information(
                 self, "Import running", "Wait for active imports before closing."

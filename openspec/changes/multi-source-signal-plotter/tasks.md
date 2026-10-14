@@ -29,6 +29,7 @@
 - [x] Add cached numeric arrays, rendering downsampling and asynchronous imports.
 - [x] Benchmark representative large datasets; document memory/performance limits.
 - [x] Run full regression suite and perform manual UI acceptance tests.
+- [x] Add a source-only File menu action for cancellable single-file PyInstaller builds.
 
 ## Optional follow-up
 - [ ] Mouse-driven interactive curve shifting with synchronization to numeric Shift controls, after UX approval.

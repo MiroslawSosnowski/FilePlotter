@@ -5,7 +5,8 @@ import pytest
 from PyQt6.QtCore import Qt
 from PyQt6.QtWidgets import QApplication, QInputDialog
 
-from fileplotter.app import MainWindow
+from fileplotter import app as app_module
+from fileplotter.app import MainWindow, pyinstaller_arguments
 from fileplotter.importers import DataSourceLoader
 from fileplotter.models import default_plot_config
 
@@ -47,6 +48,38 @@ def test_drop_zone_uses_the_standard_import_flow(qtbot, tmp_path: Path, monkeypa
     left_layout = window.drop_zone.parentWidget().layout()
     assert left_layout.indexOf(window.source_tree) < left_layout.indexOf(window.drop_zone)
     assert imports == [(str(path), None, 0)]
+
+
+def test_build_action_is_source_only_and_uses_main_entry_point(
+    qtbot, tmp_path: Path, monkeypatch
+) -> None:
+    source_window = MainWindow()
+    qtbot.addWidget(source_window)
+    assert source_window.build_action is not None
+    assert source_window.build_action.text() == "Build executable…"
+
+    monkeypatch.setattr(app_module, "is_frozen_build", lambda: True)
+    frozen_window = MainWindow()
+    qtbot.addWidget(frozen_window)
+    assert frozen_window.build_action is None
+
+    arguments = pyinstaller_arguments(tmp_path)
+    assert "--onefile" in arguments
+    assert "--windowed" in arguments
+    assert arguments[-1] == str(tmp_path / "main.py")
+
+
+def test_build_action_reports_missing_pyinstaller(qtbot, monkeypatch) -> None:
+    window = MainWindow()
+    qtbot.addWidget(window)
+    errors: list[str] = []
+    monkeypatch.setattr(app_module.importlib.util, "find_spec", lambda _name: None)
+    monkeypatch.setattr(window, "_error", errors.append)
+
+    window._build_executable()
+
+    assert errors and "PyInstaller is not installed" in errors[0]
+    assert window._build_process is None
 
 
 def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> None:

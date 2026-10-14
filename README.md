@@ -16,6 +16,19 @@ The application entry point is `main.py`. `run.cmd` invokes it directly with the
 existing `.venv`; FilePlotter itself does not need to be installed as a package.
 You can also pass a saved project directly to `run.cmd`.
 
+## Build a Windows executable
+
+When FilePlotter runs from source, choose **File → Build executable…**. The build
+runs in the background and creates `dist/FilePlotter.exe`. The command uses the
+current Python environment and requires the optional build tools:
+
+```powershell
+.\.venv\Scripts\python.exe -m pip install -e ".[build]"
+```
+
+The build command is intentionally absent from the File menu in the compiled
+application.
+
 ## Workflow
 
 1. Use **File → Add source** and select one or more `.csv` or `.xlsx` files.
