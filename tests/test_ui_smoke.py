@@ -44,6 +44,8 @@ def test_drop_zone_uses_the_standard_import_flow(qtbot, tmp_path: Path, monkeypa
     window.drop_zone.files_dropped.emit([str(path)])
 
     assert window.drop_zone.acceptDrops()
+    left_layout = window.drop_zone.parentWidget().layout()
+    assert left_layout.indexOf(window.source_tree) < left_layout.indexOf(window.drop_zone)
     assert imports == [(str(path), None, 0)]
 
 
@@ -80,7 +82,7 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
             )
         ]
         assert item.foreground(0).color().name() == curve.color
-        assert item.text(1).startswith("plotted")
+        assert item.toolTip(0).startswith("Plotted as Y")
 
     window.source_tree.itemDoubleClicked.emit(signals_group.child(1), 0)
     assert not next(
@@ -88,7 +90,7 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
         for curve in window.project.curves.values()
         if curve.y_column_id == "col_0001"
     ).visible
-    assert signals_group.child(1).text(1).startswith("available")
+    assert signals_group.child(1).toolTip(0) == "Double-click to plot as Y"
     window.source_tree.itemDoubleClicked.emit(signals_group.child(1), 0)
     window._set_source_x(source.source_id, "col_0002")
     assert window.project.source_x_columns[source.source_id] == "col_0002"
@@ -103,7 +105,8 @@ def test_source_selectors_create_curves_and_share_x(qtbot, tmp_path: Path) -> No
             if curve.y_column_id == "col_0002"
         )
     ].visible
-    assert signals_group.child(2).text(1).startswith("X axis")
+    assert window.source_tree.columnCount() == 1
+    assert signals_group.child(2).toolTip(0).startswith("X axis")
     assert signals_group.child(2).font(0).bold()
 
 

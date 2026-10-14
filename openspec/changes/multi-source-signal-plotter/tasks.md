@@ -11,6 +11,7 @@
 - [x] Separate axis mapping from available signals and add secondary-axis, minor-tick and manual-range controls.
 - [x] Replace the redundant Y dropdown with double-click plotting and color plotted signal rows by curve color.
 - [x] Replace the X dropdown with a signal-row context action and add a compact CSV/XLSX drop target.
+- [x] Remove the redundant plot-status column and place the drop target below the source tree.
 - [x] Add focused tests for import, duplicate column names and different-length X arrays.
 
 ## Phase 2 — Curve operations

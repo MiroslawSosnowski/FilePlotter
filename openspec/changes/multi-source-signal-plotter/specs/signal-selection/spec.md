@@ -19,13 +19,13 @@ The system SHALL toggle an available Y column between plotted and hidden states 
 
 #### Scenario: Identify plotted signals
 - **WHEN** a Y signal is plotted
-- **THEN** its row label uses the same color as its curve and its status indicates that it is plotted.
+- **THEN** its row label uses the same color as its curve without requiring a separate status column.
 
 ### Requirement: Separate mapping and signal inventory
 The system SHALL present X/Y assignments directly in the source's available-signal inventory without separate dropdown selectors.
 #### Scenario: Inspect a loaded source
 - **WHEN** a source is expanded in the left panel
-- **THEN** file columns appear under `Available signals`, the current X row is clearly labelled, and plotted Y rows use their curve colors.
+- **THEN** file columns appear under `Available signals`, the current X row is bold, and plotted Y rows use their curve colors.
 
 ### Requirement: Stable curve identity
 The system SHALL identify curves by source and column IDs, not by display label alone.

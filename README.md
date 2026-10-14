@@ -19,12 +19,12 @@ You can also pass a saved project directly to `run.cmd`.
 ## Workflow
 
 1. Use **File → Add source** and select one or more `.csv` or `.xlsx` files.
-   You can also drop those files onto the compact drop area above the source tree.
+   You can also drop those files onto the compact drop area below the source tree.
 2. For Excel, choose a worksheet; for every source, choose the one-based header
    row.
 3. Right-click a row under **Available signals** and choose **Set as X axis**.
    Double-click any other row to plot or hide it as a Y signal. The current X is
-   bold and labelled, while a plotted Y name uses the same color as its curve.
+   bold, while a plotted Y name uses the same color as its curve.
    Every selected Y from that source uses the chosen X. The first file name becomes
    the plot title automatically and remains editable.
 4. Select one or more plotted signals to edit X/Y offset and scale, color, line

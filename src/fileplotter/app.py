@@ -348,7 +348,7 @@ class MainWindow(QMainWindow):
     def _build_ui(self) -> None:
         splitter = QSplitter(Qt.Orientation.Horizontal)
         self.source_tree = QTreeWidget()
-        self.source_tree.setHeaderLabels(["Sources and signals", "Plot status"])
+        self.source_tree.setHeaderLabel("Sources and signals")
         self.source_tree.setSelectionMode(
             QTreeWidget.SelectionMode.ExtendedSelection
         )
@@ -367,10 +367,10 @@ class MainWindow(QMainWindow):
         add_source = QPushButton("Add CSV / XLSX")
         add_source.clicked.connect(self._choose_sources)
         left_layout.addWidget(add_source)
+        left_layout.addWidget(self.source_tree)
         self.drop_zone = FileDropZone()
         self.drop_zone.files_dropped.connect(self._add_source_paths)
         left_layout.addWidget(self.drop_zone)
-        left_layout.addWidget(self.source_tree)
 
         self.plot = PlotCanvas()
         self.plot.cursor_text.connect(self.statusBar().showMessage)
@@ -688,7 +688,7 @@ class MainWindow(QMainWindow):
         self.source_tree.clear()
         self._curve_items.clear()
         for source in self.project.sources.values():
-            root = QTreeWidgetItem([source.display_name, "ready" if source.available else "missing"])
+            root = QTreeWidgetItem([source.display_name])
             root.setData(0, Qt.ItemDataRole.UserRole, ("source", source.source_id))
             self.source_tree.addTopLevelItem(root)
             numeric = source.numeric_columns
@@ -711,16 +711,13 @@ class MainWindow(QMainWindow):
                     if curve.y_column_id == selected_x:
                         curve.visible = False
 
-            signals_group = QTreeWidgetItem(["Available signals", ""])
+            signals_group = QTreeWidgetItem(["Available signals"])
             root.addChild(signals_group)
             for column in numeric:
                 curve_id = stable_curve_id(source.source_id, column.column_id)
                 curve = self.project.curves.get(curve_id)
                 item = QTreeWidgetItem(
-                    [
-                        self._column_label(source, column.column_id),
-                        self._curve_status(source, column, curve),
-                    ]
+                    [self._column_label(source, column.column_id)]
                 )
                 item.setData(
                     0,
@@ -743,20 +740,6 @@ class MainWindow(QMainWindow):
             else column.name
         )
 
-    @staticmethod
-    def _quality_text(column: Any) -> str:
-        count = column.missing_count + column.invalid_count
-        return f"{count:,} gaps" if count else "numeric"
-
-    def _curve_status(
-        self, source: DataSource, column: Any, curve: Curve | None
-    ) -> str:
-        if self.project.source_x_columns.get(source.source_id) == column.column_id:
-            return f"X axis · {self._quality_text(column)}"
-        prefix = "plotted" if curve and curve.visible else "available"
-        quality = self._quality_text(column)
-        return f"{prefix} · {quality}"
-
     def _update_curve_item(
         self, source: DataSource, column: Any, curve: Curve | None
     ) -> None:
@@ -764,12 +747,17 @@ class MainWindow(QMainWindow):
         if item is None:
             return
         is_x = self.project.source_x_columns.get(source.source_id) == column.column_id
-        item.setText(1, self._curve_status(source, column, curve))
         brush = QBrush(QColor(curve.color)) if curve and curve.visible else QBrush()
         item.setForeground(0, brush)
         font = item.font(0)
         font.setBold(is_x)
         item.setFont(0, font)
+        if is_x:
+            item.setToolTip(0, "X axis · right-click another signal to change X")
+        elif curve and curve.visible:
+            item.setToolTip(0, "Plotted as Y · double-click to hide")
+        else:
+            item.setToolTip(0, "Double-click to plot as Y")
 
     def _show_source_tree_menu(self, position: Any) -> None:
         item = self.source_tree.itemAt(position)

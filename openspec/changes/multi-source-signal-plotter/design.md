@@ -15,7 +15,7 @@ Python 3.12+, PyQt6, PyQtGraph, NumPy, pandas, openpyxl. JSON for project metada
 Scaling is applied before shifting. Shifts use displayed-axis units. Negative scales are permitted, zero scales require an explicit warning because they collapse an axis. Numeric inputs must reject NaN and infinity.
 
 ## UI
-Left panel: add-source button, compact CSV/XLSX drop target, and a source tree where a context-menu action sets X, double-click toggles Y plotting, and plotted rows use their curve colors. Center: interactive plot. Right/bottom: selected-curve properties and numeric scale/offset editor. Multi-selection edits are explicit: apply same absolute parameter values to all selected curves; preserve non-edited properties. Show transformed values on hover/cursor readout.
+Left panel: add-source button, a single-column source tree where a context-menu action sets X, double-click toggles Y plotting, and plotted rows use their curve colors, followed by a compact CSV/XLSX drop target at the bottom. Center: interactive plot. Right/bottom: selected-curve properties and numeric scale/offset editor. Multi-selection edits are explicit: apply same absolute parameter values to all selected curves; preserve non-edited properties. Show transformed values on hover/cursor readout.
 
 ## Performance
 Read files off the UI thread; cache parsed raw numeric columns, avoid per-frame full-file reloads. Use PyQtGraph clipping/downsampling for rendering only. Exports operate on full-resolution transformed values. Preserve distinct X vectors, lengths and sampling intervals. Bound memory and report failures rather than silently dropping datasets.
